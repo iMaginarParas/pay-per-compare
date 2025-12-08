@@ -172,17 +172,35 @@ def run_replicate_inference(request: ImageGenerationRequest) -> List[str]:
     
     # Handle different output types
     if model_config["output_type"] == "single":
-        # Single output - could be File object or URL string
-        if hasattr(output, 'url'):
-            return [str(output.url())]
+        # Single output - handle all possible formats
+        if isinstance(output, str):
+            # Already a string URL
+            return [output]
+        elif hasattr(output, 'url'):
+            # Has url attribute - check if it's callable or property
+            url_attr = getattr(output, 'url')
+            if callable(url_attr):
+                return [str(url_attr())]
+            else:
+                return [str(url_attr)]
         else:
+            # Last resort - convert to string
             return [str(output)]
     else:
-        # Array output - could be File objects or URL strings
+        # Array output - handle each item
         result = []
         for item in output:
-            if hasattr(item, 'url'):
-                result.append(str(item.url()))
+            if isinstance(item, str):
+                # Already a string URL
+                result.append(item)
+            elif hasattr(item, 'url'):
+                # Has url attribute - check if it's callable or property
+                url_attr = getattr(item, 'url')
+                if callable(url_attr):
+                    result.append(str(url_attr()))
+                else:
+                    result.append(str(url_attr))
             else:
+                # Last resort - convert to string
                 result.append(str(item))
         return result
