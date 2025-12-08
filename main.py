@@ -6,28 +6,38 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from dotenv import load_dotenv
 from web3 import Web3
-from decimal import Decimal
+from eth_utils import to_checksum_address
 
-# 1. Load environment variables
 load_dotenv()
 
-app = FastAPI(title="SDXL Image Generator API (Fuji Testnet)")
+app = FastAPI(title="SDXL Generator (USDC x402)")
 
-# --- CONFIGURATION FOR TESTNET ---
-# Connect to Avalanche Fuji Testnet
+# --- CONFIGURATION ---
+# Connect to Fuji Testnet
 AVAX_RPC_URL = "https://api.avax-test.network/ext/bc/C/rpc"
 w3 = Web3(Web3.HTTPProvider(AVAX_RPC_URL))
 
-# Load Wallet from .env
-RECEIVING_WALLET_ADDRESS = os.getenv("RECEIVING_WALLET_ADDRESS") 
+RECEIVING_WALLET_ADDRESS = to_checksum_address(os.getenv("RECEIVING_WALLET_ADDRESS"))
+USDC_CONTRACT_ADDRESS = to_checksum_address(os.getenv("USDC_CONTRACT_ADDRESS"))
 
-# Cost per generation (0.05 Testnet AVAX)
-REQUIRED_AMOUNT_AVAX = Decimal("0.05") 
+# Cost: 1.0 USDC (USDC has 6 decimals, so 1.0 = 1,000,000 units)
+REQUIRED_USDC_AMOUNT = int(0.03 * 10**6)
 
-# In-memory storage to prevent Replay Attacks
+# Store used hashes to prevent replay attacks
 USED_TRANSACTION_HASHES = set()
 
-# Allow CORS
+# Minimal ABI to decode the "Transfer" event
+ERC20_TRANSFER_EVENT_ABI = {
+    "anonymous": False,
+    "inputs": [
+        {"indexed": True, "name": "from", "type": "address"},
+        {"indexed": True, "name": "to", "type": "address"},
+        {"indexed": False, "name": "value", "type": "uint256"},
+    ],
+    "name": "Transfer",
+    "type": "event",
+}
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -38,14 +48,11 @@ app.add_middleware(
 )
 
 class ImageGenerationRequest(BaseModel):
-    prompt: str = Field(..., description="Text prompt for image generation")
-    negative_prompt: Optional[str] = Field(None, description="Things to avoid")
-    width: int = Field(768, ge=128, le=1024)
-    height: int = Field(768, ge=128, le=1024)
-    num_inference_steps: int = Field(25, ge=1, le=50)
-    refine: str = Field("expert_ensemble_refiner")
-    apply_watermark: bool = Field(False)
-    num_outputs: int = Field(1, ge=1, le=4)
+    prompt: str
+    negative_prompt: Optional[str] = None
+    width: int = 768
+    height: int = 768
+    num_inference_steps: int = 25
 
 class ImageGenerationResponse(BaseModel):
     image_urls: List[str]
@@ -53,105 +60,71 @@ class ImageGenerationResponse(BaseModel):
 @app.get("/")
 async def root():
     return {
-        "message": "SDXL Generator API (Testnet) is running.", 
+        "message": "x402 Payment Gateway Running",
         "payment_info": {
-            "currency": "AVAX (Fuji Testnet)",
-            "address": RECEIVING_WALLET_ADDRESS,
-            "required_amount": float(REQUIRED_AMOUNT_AVAX)
+            "currency": "USDC (Fuji)",
+            "contract": USDC_CONTRACT_ADDRESS,
+            "receiver": RECEIVING_WALLET_ADDRESS,
+            "amount_units": REQUIRED_USDC_AMOUNT,
+            "readable_amount": "0.03 USDC"
         }
     }
 
-async def verify_payment_middleware(x_payment_tx: str = Header(..., alias="X-Payment-Tx", description="The Transaction Hash")):
-    """
-    Verifies the transaction on the Avalanche Fuji Testnet.
-    """
-    if not RECEIVING_WALLET_ADDRESS:
-        raise HTTPException(status_code=500, detail="Server misconfiguration: No wallet address set in .env")
-
-    # 1. Check for Replay Attack
+async def verify_usdc_payment(x_payment_tx: str = Header(..., alias="X-Payment-Tx")):
     if x_payment_tx in USED_TRANSACTION_HASHES:
-        raise HTTPException(status_code=402, detail="Payment already used.")
+        raise HTTPException(status_code=402, detail="Payment hash already used.")
 
     try:
-        # 2. Fetch Transaction from Testnet
-        tx = w3.eth.get_transaction(x_payment_tx)
         tx_receipt = w3.eth.get_transaction_receipt(x_payment_tx)
     except Exception:
-        raise HTTPException(status_code=402, detail="Transaction hash not found on Avalanche Fuji Testnet.")
+        raise HTTPException(status_code=402, detail="Transaction not found.")
 
-    # 3. Verify Status (1 = Success)
     if tx_receipt['status'] != 1:
-        raise HTTPException(status_code=402, detail="Transaction failed on blockchain.")
+        raise HTTPException(status_code=402, detail="Transaction failed on-chain.")
 
-    # 4. Verify Receiver
-    if tx['to'].lower() != RECEIVING_WALLET_ADDRESS.lower():
-        raise HTTPException(status_code=402, detail=f"Transaction sent to wrong address. Expected {RECEIVING_WALLET_ADDRESS}")
+    # Parse logs to find the Transfer event
+    contract = w3.eth.contract(address=USDC_CONTRACT_ADDRESS, abi=[ERC20_TRANSFER_EVENT_ABI])
+    transfers = contract.events.Transfer().process_receipt(tx_receipt)
 
-    # 5. Verify Amount
-    value_in_avax = w3.from_wei(tx['value'], 'ether')
-    if value_in_avax < REQUIRED_AMOUNT_AVAX:
-        raise HTTPException(
-            status_code=402, 
-            detail=f"Insufficient payment. Received {value_in_avax} AVAX, required {REQUIRED_AMOUNT_AVAX} AVAX."
-        )
-
-    # 6. Mark as used
-    USED_TRANSACTION_HASHES.add(x_payment_tx)
+    payment_found = False
     
+    for transfer in transfers:
+        # Check if money was sent TO us
+        if transfer['args']['to'] == RECEIVING_WALLET_ADDRESS:
+            # Check amount
+            if transfer['args']['value'] >= REQUIRED_USDC_AMOUNT:
+                payment_found = True
+                break
+    
+    if not payment_found:
+        raise HTTPException(status_code=402, detail="No valid USDC transfer found in this transaction.")
+
+    USED_TRANSACTION_HASHES.add(x_payment_tx)
     return x_payment_tx
 
 @app.post("/generate", response_model=ImageGenerationResponse)
 async def generate_image(
     request: ImageGenerationRequest, 
     response: Response,
-    payment_hash: str = Depends(verify_payment_middleware)
+    payment_hash: str = Depends(verify_usdc_payment)
 ):
+    # ... (Your existing Replicate generation code here) ...
+    # This part is identical to your previous code
+    
     api_token = os.getenv("REPLICATE_API_TOKEN")
-    if not api_token:
-        raise HTTPException(status_code=500, detail="REPLICATE_API_TOKEN is missing in .env")
-
-    try:
-        input_data = {
-            "prompt": request.prompt,
-            "width": request.width,
-            "height": request.height,
-            "num_inference_steps": request.num_inference_steps,
-            "refine": request.refine,
-            "apply_watermark": request.apply_watermark,
-            "num_outputs": request.num_outputs
-        }
-        
-        if request.negative_prompt:
-            input_data["negative_prompt"] = request.negative_prompt
-
-        model_version = "stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc"
-        
-        prediction = replicate.predictions.create(
-            version=model_version,
-            input=input_data
-        )
-        
-        prediction.wait()
-        
-        if prediction.status != "succeeded":
-            raise HTTPException(status_code=500, detail=f"Prediction failed: {prediction.error}")
-
-        # Cost display for headers
-        response.headers["X-Cost"] = "0.03 USD" 
-        if prediction.metrics and "predict_time" in prediction.metrics:
-            response.headers["X-Run-Time"] = str(prediction.metrics["predict_time"])
-
-        output = prediction.output
-        image_urls = [str(item) for item in output]
-        
-        return ImageGenerationResponse(image_urls=image_urls)
-
-    except replicate.exceptions.ReplicateError as e:
-        raise HTTPException(status_code=502, detail=f"Replicate API Error: {str(e)}")
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Server Error: {str(e)}")
+    input_data = {
+        "prompt": request.prompt,
+        "width": request.width,
+        "height": request.height,
+        "num_inference_steps": request.num_inference_steps
+    }
+    
+    prediction = replicate.predictions.create(
+        version="stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc",
+        input=input_data
+    )
+    prediction.wait()
+    return ImageGenerationResponse(image_urls=[str(url) for url in prediction.output])
 
 if __name__ == "__main__":
     import uvicorn

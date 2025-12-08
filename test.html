@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SDXL Generator (Pay with AVAX)</title>
+    <title>SDXL Generator (Pay with USDC)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
     <style>
         :root {
-            --primary: #e84142; /* Avalanche Red */
-            --primary-hover: #c93637;
+            --primary: #2775ca; /* USDC Blue */
+            --primary-hover: #2061a8;
             --bg: #0f172a;
             --card-bg: #1e293b;
             --text: #f8fafc;
@@ -51,7 +51,6 @@
             height: fit-content;
         }
 
-        /* Header with Wallet Connect */
         .header-row {
             display: flex;
             justify-content: space-between;
@@ -84,9 +83,9 @@
         }
 
         .wallet-btn.connected {
-            background-color: #10b98120;
-            border-color: var(--success);
-            color: var(--success);
+            background-color: #2775ca20;
+            border-color: var(--primary);
+            color: var(--primary);
         }
 
         .form-group {
@@ -130,7 +129,6 @@
             flex: 1;
         }
 
-        /* Main Action Button */
         .generate-btn {
             width: 100%;
             background-color: var(--primary);
@@ -207,7 +205,6 @@
             border-radius: 12px;
         }
 
-        /* Loading Spinner */
         .spinner {
             width: 20px;
             height: 20px;
@@ -279,7 +276,7 @@
                 <div class="spinner" id="btnSpinner"></div>
                 <span id="btnText">Pay & Generate</span>
             </button>
-            <span class="cost-badge" id="costDisplay">Cost: 0.05 AVAX (Fuji Testnet)</span>
+            <span class="cost-badge" id="costDisplay">Loading Price...</span>
             
             <div id="errorMsg" style="color: #ef4444; margin-top: 1rem; font-size: 0.9rem; display: none;"></div>
         </div>
@@ -287,7 +284,7 @@
         <div class="results">
             <div id="gallery" class="gallery"></div>
             <div id="placeholder" class="status-msg">
-                Connect your wallet and pay 0.05 AVAX to generate.
+                Connect your wallet and pay to generate.
             </div>
         </div>
     </div>
@@ -295,11 +292,19 @@
     <script>
         const API_BASE = "http://127.0.0.1:8000";
         let provider, signer, userAddress;
+        
+        // This will be populated from your Backend API
         let paymentConfig = {
-            required_amount: 0.05,
-            address: "", // Will be fetched from API
-            currency: "AVAX"
+            contract: "", 
+            receiver: "",
+            amount_units: 30000 // Default 0.03 USDC (30000 units)
         };
+
+        // Standard ERC-20 ABI (Only the transfer function needed)
+        const ERC20_ABI = [
+            "function transfer(address to, uint256 amount) returns (bool)",
+            "function decimals() view returns (uint8)"
+        ];
 
         // Avalanche Fuji Testnet Params
         const FUJI_CHAIN_ID = '0xa869'; // 43113
@@ -319,11 +324,16 @@
                 if(data.payment_info) {
                     paymentConfig = data.payment_info;
                     console.log("Payment Config Loaded:", paymentConfig);
+                    // Use readable amount from backend or calculate locally
+                    const displayAmount = data.payment_info.readable_amount || "0.03 USDC";
+                    document.getElementById('costDisplay').textContent = `Cost: ${displayAmount}`;
+                    document.getElementById('placeholder').textContent = `Connect your wallet and pay ${displayAmount} to generate.`;
                 }
             } catch (err) {
                 console.error("Failed to connect to backend", err);
-                document.getElementById('errorMsg').innerText = "Backend is offline.";
+                document.getElementById('errorMsg').innerText = "Backend is offline or unreachable.";
                 document.getElementById('errorMsg').style.display = 'block';
+                document.getElementById('costDisplay').innerText = "Cost: 0.03 USDC (Offline Mode)";
             }
         };
 
@@ -356,15 +366,13 @@
 
         async function checkAndSwitchNetwork() {
             const network = await provider.getNetwork();
-            // Ethers v6 returns chainId as BigInt
-            if (network.chainId !== 43113n) { 
+            if (network.chainId !== 43113n) { // Fuji Chain ID
                 try {
                     await window.ethereum.request({
                         method: 'wallet_switchEthereumChain',
                         params: [{ chainId: FUJI_CHAIN_ID }],
                     });
                 } catch (switchError) {
-                    // This error code indicates that the chain has not been added to MetaMask.
                     if (switchError.code === 4902) {
                         await window.ethereum.request({
                             method: 'wallet_addEthereumChain',
@@ -400,21 +408,23 @@
             
             try {
                 // 1. PAYMENT PHASE
-                btnText.textContent = "Confirm in Wallet...";
+                btnText.textContent = "Processing USDC...";
                 
-                // Ensure on Fuji
                 await checkAndSwitchNetwork();
 
-                // Send Transaction
-                const tx = await signer.sendTransaction({
-                    to: paymentConfig.address,
-                    value: ethers.parseEther(paymentConfig.required_amount.toString())
-                });
+                // Create Contract Instance
+                // Ensure contract address is present
+                if(!paymentConfig.contract) throw new Error("Contract address not loaded.");
+                const usdcContract = new ethers.Contract(paymentConfig.contract, ERC20_ABI, signer);
 
-                btnText.textContent = "Verifying Payment...";
+                // Send Transfer Transaction
+                // Note: We use the raw amount units provided by backend (30000 for 0.03 USDC)
+                const tx = await usdcContract.transfer(paymentConfig.receiver, paymentConfig.amount_units);
+
+                btnText.textContent = "Verifying On-Chain...";
                 placeholder.textContent = "Payment sent! Waiting for block confirmation...";
                 
-                // Wait for 1 block confirmation to ensure backend can see it
+                // Wait for confirmation
                 const receipt = await tx.wait(1);
                 const txHash = receipt.hash;
                 console.log("Transaction confirmed:", txHash);
@@ -427,7 +437,18 @@
 
             } catch (err) {
                 console.error(err);
-                errorMsg.textContent = "Error: " + (err.shortMessage || err.message);
+                
+                // Handle common user rejections or insufficient funds
+                let msg = err.message;
+                if (msg.includes("user rejected") || (err.info && err.info.error && err.info.error.code === 4001)) {
+                    msg = "Transaction rejected by user.";
+                } else if (msg.includes("insufficient funds")) {
+                    msg = "Insufficient AVAX for gas.";
+                } else if (msg.includes("transfer amount exceeds balance")) {
+                    msg = "Insufficient USDC balance.";
+                }
+                
+                errorMsg.textContent = "Error: " + msg;
                 errorMsg.style.display = 'block';
                 btnText.textContent = "Pay & Generate";
                 placeholder.textContent = "Process failed.";
@@ -452,17 +473,14 @@
                 negative_prompt: negativePrompt || null,
                 width,
                 height,
-                num_inference_steps: steps,
-                refine: "expert_ensemble_refiner",
-                apply_watermark: false,
-                num_outputs: 1
+                num_inference_steps: steps
             };
 
             const response = await fetch(`${API_BASE}/generate`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Payment-Tx': txHash // <-- SEND HASH HERE
+                    'X-Payment-Tx': txHash // <-- Authorization Header
                 },
                 body: JSON.stringify(payload)
             });
