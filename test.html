@@ -3,606 +3,562 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Model AI Generator (USDC)</title>
+    <title>Multi-Model Gen (USDC)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
     <style>
         :root {
-            --primary: #2775ca; /* USDC Blue */
-            --primary-hover: #2061a8;
-            --bg: #0f172a;
-            --card-bg: #1e293b;
-            --text: #f8fafc;
-            --text-muted: #94a3b8;
-            --border: #334155;
-            --success: #10b981;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --bg: #FAFAFA;
+            --card-bg: #FFFFFF;
+            --text: #1A1A1A;
+            --text-light: #757575;
+            --primary: #1A1A1A;
+            --accent: #2563EB; /* Stronger Blue */
+            --accent-light: #EFF6FF;
+            --border: #E5E5E5;
+            --success: #10B981;
         }
 
         body {
             background-color: var(--bg);
             color: var(--text);
-            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            padding-bottom: 120px;
+        }
+
+        /* --- TOP NAV --- */
+        .top-nav {
             display: flex;
-            flex-direction: column;
+            justify-content: space-between;
             align-items: center;
-            padding: 2rem;
+            padding: 1rem 2rem;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .brand {
+            font-weight: 800;
+            font-size: 1.2rem;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .container {
-            width: 100%;
-            max-width: 1200px;
+            max-width: 100%;
+            padding: 2rem;
+            box-sizing: border-box;
+            overflow-x: hidden;
+        }
+
+        h2 {
+            font-size: 0.85rem;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        /* --- INTERACTIVE MODEL GRID --- */
+        .model-grid {
             display: grid;
-            grid-template-columns: 350px 1fr;
-            gap: 2rem;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 1rem;
+            max-width: 1400px;
+            margin: 0 auto;
         }
 
-        /* Controls Section */
-        .controls {
-            background-color: var(--card-bg);
-            padding: 1.5rem;
-            border-radius: 12px;
+        .model-card {
+            background: var(--card-bg);
             border: 1px solid var(--border);
-            height: fit-content;
+            border-radius: 16px;
+            padding: 1.2rem;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            user-select: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            height: 100%;
+            box-sizing: border-box;
         }
 
-        .header-row {
+        /* Hover Effect: Lift & Shadow */
+        .model-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.08);
+            border-color: #cbd5e1;
+        }
+
+        /* Active/Click Effect */
+        .model-card:active {
+            transform: scale(0.98);
+        }
+
+        /* Selected State */
+        .model-card.selected {
+            border: 2px solid var(--accent);
+            background-color: var(--accent-light);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+        }
+
+        .card-top {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
+            align-items: flex-start;
         }
 
-        h1 {
-            font-size: 1.2rem;
-            color: var(--text);
+        .model-name {
             font-weight: 700;
-            margin: 0;
+            font-size: 1rem;
+            line-height: 1.2;
+            text-transform: capitalize;
+            color: var(--text);
+        }
+
+        /* Cost Badge */
+        .cost-badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: #F3F4F6;
+            padding: 4px 8px;
+            border-radius: 20px;
+            color: #4B5563;
+        }
+        
+        .model-card.selected .cost-badge {
+            background: white;
+            color: var(--accent);
+        }
+
+        /* Provider/Source Info */
+        .provider-info {
+            font-size: 0.8rem;
+            color: var(--text-light);
+            margin-top: auto; /* Pushes to bottom */
+            padding-top: 0.8rem;
+            border-top: 1px solid #f0f0f0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .model-card.selected .provider-info {
+            border-top-color: rgba(37, 99, 235, 0.2);
+            color: #60A5FA;
+        }
+
+        /* Checkmark Icon for Selection */
+        .check-icon {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: var(--accent);
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            opacity: 0;
+            transform: scale(0);
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .model-card.selected .check-icon {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* --- RESULTS SCROLL AREA --- */
+        .results-container {
+            width: 100%;
+            overflow-x: auto;
+            padding-bottom: 2rem;
+            margin-top: 2rem;
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 transparent;
+        }
+        .results-container::-webkit-scrollbar { height: 8px; }
+        .results-container::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
+        
+        .results-flex {
+            display: flex;
+            gap: 1.5rem;
+            padding: 0 1rem;
+            width: max-content;
+        }
+
+        .result-card {
+            width: 300px;
+            min-width: 300px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #fff;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            animation: slideIn 0.4s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .result-card img {
+            width: 100%;
+            height: auto;
+            min-height: 200px;
+            max-height: 400px;
+            object-fit: contain;
+            background: #f0f0f0;
+            display: block;
+            border-bottom: 1px solid #eee;
+        }
+
+        .result-meta {
+            padding: 12px;
+            background: #fff;
+            font-size: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* LOADING STATE */
+        .loading-placeholder {
+            height: 300px;
+            justify-content: center;
+            align-items: center;
+            background: #F9FAFB;
+            color: var(--text-light);
+            gap: 1rem;
+        }
+        .loading-spinner {
+            width: 24px; height: 24px;
+            border: 3px solid #e5e5e5; border-top-color: var(--accent);
+            border-radius: 50%; animation: spin 1s linear infinite;
+        }
+
+        /* BOTTOM BAR */
+        .bottom-bar {
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(5px);
+            border-top: 1px solid var(--border);
+            padding: 1.5rem 2rem;
+            display: flex; gap: 1rem; align-items: center;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.03);
+            z-index: 100; box-sizing: border-box;
         }
 
         .wallet-btn {
-            background-color: var(--card-bg);
-            border: 1px solid var(--primary);
-            color: var(--primary);
-            padding: 0.5rem 1rem;
-            font-size: 0.8rem;
-            border-radius: 20px;
-            cursor: pointer;
-            transition: all 0.2s;
-            white-space: nowrap;
-        }
-
-        .wallet-btn:hover {
-            background-color: var(--primary);
-            color: white;
-        }
-
-        .wallet-btn.connected {
-            background-color: #2775ca20;
-            border-color: var(--primary);
-            color: var(--primary);
-        }
-
-        .form-group {
-            margin-bottom: 1.25rem;
-        }
-
-        label {
-            display: block;
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            margin-bottom: 0.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .price-tag {
-            background: var(--primary);
-            color: white;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-
-        textarea, input, select {
-            width: 100%;
-            background-color: var(--bg);
-            border: 1px solid var(--border);
-            color: var(--text);
-            padding: 0.75rem;
-            border-radius: 6px;
+            padding: 0 1.5rem; height: 40px; border-radius: 20px;
+            border: 1px solid var(--border); background: white;
+            font-weight: 600; cursor: pointer; transition: all 0.2s;
             font-size: 0.9rem;
-            transition: border-color 0.2s;
+        }
+        .wallet-btn.connected {
+            border-color: var(--accent); color: var(--accent); background: #EFF6FF;
         }
 
-        textarea:focus, input:focus, select:focus {
-            outline: none;
-            border-color: var(--primary);
+        .prompt-input {
+            flex: 1; height: 50px; border: 1px solid var(--border);
+            border-radius: 12px; padding: 0 1rem; font-size: 1rem;
+            outline: none; transition: border-color 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.02) inset;
         }
+        .prompt-input:focus { border-color: var(--accent); }
 
-        textarea {
-            resize: vertical;
-            min-height: 80px;
+        .run-btn {
+            background: var(--text); color: white; border: none;
+            height: 50px; padding: 0 2rem; border-radius: 12px;
+            font-weight: 600; font-size: 1rem; cursor: pointer;
+            transition: all 0.2s; min-width: 220px;
         }
+        .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .run-btn:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
 
-        .row {
-            display: flex;
-            gap: 1rem;
-        }
-
-        .col {
-            flex: 1;
-        }
-
-        .generate-btn {
-            width: 100%;
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            padding: 1rem;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .generate-btn:hover {
-            background-color: var(--primary-hover);
-        }
-
-        .generate-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            background-color: var(--border);
-        }
-
-        .cost-badge {
-            display: block;
-            text-align: center;
-            margin-top: 0.5rem;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-        }
-
-        /* Results Section */
-        .results {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .gallery {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 1rem;
-        }
-
-        .image-card {
-            background-color: var(--card-bg);
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid var(--border);
-            position: relative;
-            animation: fadeIn 0.5s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .image-card img {
-            width: 100%;
-            height: auto;
-            display: block;
-            transition: transform 0.3s ease;
-        }
-        
-        .image-card .meta {
-            padding: 10px;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            border-top: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .status-msg {
-            text-align: center;
-            padding: 2rem;
-            color: var(--text-muted);
-            border: 2px dashed var(--border);
-            border-radius: 12px;
-        }
-
-        .spinner {
-            width: 20px;
-            height: 20px;
-            border: 3px solid #ffffff3d;
-            border-top: 3px solid #fff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            display: none;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        #errorMsg {
-            color: #ef4444; 
-            margin-top: 1rem; 
-            font-size: 0.9rem; 
-            display: none;
-            background: rgba(239, 68, 68, 0.1);
-            padding: 0.5rem;
-            border-radius: 6px;
-            border: 1px solid rgba(239, 68, 68, 0.2);
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                grid-template-columns: 1fr;
-            }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
+    <div class="top-nav">
+        <div class="brand">
+            <span>⚡ x402 Arena</span>
+        </div>
+        <button id="walletBtn" class="wallet-btn" onclick="connectWallet()">Connect Wallet</button>
+    </div>
+
     <div class="container">
-        <div class="controls">
-            <div class="header-row">
-                <h1>GenAI Hub</h1>
-                <button id="connectWalletBtn" class="wallet-btn" onclick="connectWallet()">Connect Wallet</button>
-            </div>
-            
-            <div class="form-group">
-                <label for="modelSelect">
-                    Model 
-                    <span id="priceBadge" class="price-tag">Loading...</span>
-                </label>
-                <select id="modelSelect" onchange="updateSelectedModel()">
-                    <option value="" disabled selected>Loading available models...</option>
-                </select>
-            </div>
+        
+        <div style="max-width: 1400px; margin: 0 auto;">
+            <p style="color: var(--text-light); margin-top:0;">
+                Compare models side-by-side. Pay per generation with USDC (Fuji).
+            </p>
 
-            <div class="form-group">
-                <label for="prompt">Prompt *</label>
-                <textarea id="prompt" placeholder="A futuristic city with neon lights..." required></textarea>
+            <h2>Select Models</h2>
+            <div id="modelGrid" class="model-grid">
+                <div style="padding:20px;">Loading models...</div>
             </div>
-
-            <div class="form-group">
-                <label for="negative_prompt">Negative Prompt</label>
-                <textarea id="negative_prompt" placeholder="blurry, bad quality..." style="min-height: 60px;"></textarea>
-            </div>
-
-            <div class="row">
-                <div class="col form-group">
-                    <label>Width</label>
-                    <select id="width">
-                        <option value="1024">1024</option>
-                        <option value="768" selected>768</option>
-                        <option value="512">512</option>
-                    </select>
-                </div>
-                <div class="col form-group">
-                    <label>Height</label>
-                    <select id="height">
-                        <option value="1024">1024</option>
-                        <option value="768" selected>768</option>
-                        <option value="512">512</option>
-                    </select>
-                </div>
-            </div>
-
-            <button id="generateBtn" class="generate-btn" onclick="handlePaymentAndGeneration()">
-                <div class="spinner" id="btnSpinner"></div>
-                <span id="btnText">Pay & Generate</span>
-            </button>
-            <span class="cost-badge" id="costDisplay">Connect Wallet to Begin</span>
-            
-            <div id="errorMsg"></div>
         </div>
 
-        <div class="results">
-            <div id="gallery" class="gallery"></div>
-            <div id="placeholder" class="status-msg">
-                Select a model and connect wallet to generate.
-            </div>
+        <div id="resultsContainer" class="results-container">
+            <div id="resultsFlex" class="results-flex">
+                </div>
         </div>
     </div>
 
+    <div class="bottom-bar">
+        <input type="text" id="promptInput" class="prompt-input" placeholder="Imagine a futuristic city on Mars..." />
+        <button id="runBtn" class="run-btn" onclick="handlePayAndRun()" disabled>
+            Select Models First
+        </button>
+    </div>
+
     <script>
-        // Update this URL if your backend is deployed elsewhere
-        const API_BASE = "https://pay-per-compare-production.up.railway.app"; 
+        const API_BASE = "https://pay-per-compare-production.up.railway.app";
         
-        let provider, signer, userAddress;
-        
-        // Configuration loaded from backend
-        let systemConfig = {
-            contract: "", 
-            receiver: ""
-        };
+        let systemConfig = {};
+        let availableModels = {};
+        let selectedModels = new Set();
+        let userAddress = null;
+        let provider, signer;
 
-        // Cache for model data (id -> {cost_usd, identifier})
-        let modelCache = {}; 
-        let currentModelCostUSD = 0;
-
-        // Standard ERC-20 ABI (Transfer only)
-        const ERC20_ABI = [
-            "function transfer(address to, uint256 amount) returns (bool)",
-            "function decimals() view returns (uint8)"
-        ];
-
-        // Avalanche Fuji Testnet
-        const FUJI_CHAIN_ID = '0xa869'; // 43113
-        const FUJI_CONFIG = {
-            chainId: FUJI_CHAIN_ID,
-            chainName: 'Avalanche Fuji Testnet',
-            nativeCurrency: { name: 'Avalanche', symbol: 'AVAX', decimals: 18 },
-            rpcUrls: ['https://api.avax-test.network/ext/bc/C/rpc'],
-            blockExplorerUrls: ['https://testnet.snowtrace.io/']
-        };
-
-        // --- Initialization ---
         window.onload = async () => {
-            await Promise.all([
-                fetchConfig(),
-                fetchModels()
-            ]);
+            await loadConfig();
+            await loadModels();
         };
 
-        async function fetchConfig() {
+        async function loadConfig() {
             try {
                 const res = await fetch(`${API_BASE}/`);
                 const data = await res.json();
-                if(data.payment_info) {
-                    systemConfig.contract = data.payment_info.contract;
-                    systemConfig.receiver = data.payment_info.receiver;
-                }
-            } catch (err) {
-                console.error("Config load failed", err);
-                showError("Backend is offline.");
-            }
+                systemConfig = data.payment_info;
+            } catch(e) { console.error("Config error", e); }
         }
 
-        async function fetchModels() {
+        async function loadModels() {
             try {
                 const res = await fetch(`${API_BASE}/models`);
                 const data = await res.json();
-                modelCache = data.available_models;
-                
-                const select = document.getElementById('modelSelect');
-                select.innerHTML = ""; // Clear loading state
-
-                // Populate Dropdown
-                Object.keys(modelCache).forEach(key => {
-                    const opt = document.createElement('option');
-                    opt.value = key;
-                    opt.text = key;
-                    // Pre-select SDXL if available
-                    if(key === 'sdxl') opt.selected = true;
-                    select.appendChild(opt);
-                });
-
-                // Trigger update to set initial price
-                updateSelectedModel();
-
-            } catch (err) {
-                console.error("Model fetch failed", err);
-                document.getElementById('modelSelect').innerHTML = '<option>Error loading models</option>';
+                availableModels = data.available_models; 
+                renderGrid();
+            } catch(e) { 
+                document.getElementById('modelGrid').innerHTML = "Failed to load models."; 
             }
         }
 
-        function updateSelectedModel() {
-            const select = document.getElementById('modelSelect');
-            const modelKey = select.value;
+        // --- HELPER: Identify Provider ---
+        function getProviderInfo(identifier) {
+            if (!identifier) return "Unknown Source";
             
-            if (modelCache[modelKey]) {
-                currentModelCostUSD = modelCache[modelKey].cost_usd;
-                
-                // Update Badge
-                document.getElementById('priceBadge').textContent = `$${currentModelCostUSD}`;
-                
-                // Update Info Text
-                updateStatusText();
-            }
-        }
-
-        function updateStatusText() {
-            const display = document.getElementById('costDisplay');
-            const placeholder = document.getElementById('placeholder');
+            const id = identifier.toLowerCase();
+            if (id.includes('stability-ai')) return "By Stability AI";
+            if (id.includes('google')) return "By Google";
+            if (id.includes('black-forest-labs')) return "By Black Forest Labs";
+            if (id.includes('luma')) return "By Luma Labs";
+            if (id.includes('bytedance')) return "By ByteDance";
+            if (id.includes('ideogram')) return "By Ideogram";
+            if (id.includes('leonardo')) return "By Leonardo.Ai";
+            if (id.includes('recraft')) return "By Recraft";
+            if (id.includes('minimax')) return "By Minimax";
             
-            if (userAddress) {
-                display.textContent = `Cost: $${currentModelCostUSD} (Paid in USDC)`;
-                placeholder.textContent = `Ready to generate with ${document.getElementById('modelSelect').value}`;
-            } else {
-                display.textContent = `Cost: $${currentModelCostUSD} - Connect Wallet`;
+            // Fallback for others
+            return "Open Source / Community";
+        }
+
+        function renderGrid() {
+            const grid = document.getElementById('modelGrid');
+            grid.innerHTML = "";
+            const sortedKeys = Object.keys(availableModels).sort((a,b) => 
+                availableModels[a].cost_usd - availableModels[b].cost_usd
+            );
+
+            sortedKeys.forEach(key => {
+                const info = availableModels[key];
+                const isSelected = selectedModels.has(key);
+                const providerText = getProviderInfo(info.identifier);
+                
+                const card = document.createElement('div');
+                card.className = `model-card ${isSelected ? 'selected' : ''}`;
+                card.onclick = () => toggleModel(key);
+                
+                card.innerHTML = `
+                    <div class="check-icon">✓</div>
+                    <div class="card-top">
+                        <span class="model-name">${key}</span>
+                        <span class="cost-badge">$${info.cost_usd}</span>
+                    </div>
+                    <div class="provider-info">
+                        ${providerText}
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+            updateRunButton();
+        }
+
+        function toggleModel(key) {
+            if (selectedModels.has(key)) selectedModels.delete(key);
+            else {
+                if (selectedModels.size >= 12) return alert("Max 12 models.");
+                selectedModels.add(key);
             }
+            renderGrid();
         }
 
-        function showError(msg) {
-            const el = document.getElementById('errorMsg');
-            el.textContent = msg;
-            el.style.display = 'block';
-        }
-
-        // --- Wallet Logic ---
-        async function connectWallet() {
-            if (!window.ethereum) {
-                alert("MetaMask is not installed!");
+        function updateRunButton() {
+            const btn = document.getElementById('runBtn');
+            const totalCost = Array.from(selectedModels).reduce((sum, key) => sum + availableModels[key].cost_usd, 0);
+            
+            if (selectedModels.size === 0) {
+                btn.innerText = "Select Models First";
+                btn.disabled = true;
                 return;
             }
 
+            btn.innerText = `Pay $${totalCost.toFixed(4)} & Run (${selectedModels.size})`;
+            btn.disabled = !userAddress;
+            if(!userAddress) btn.innerText = "Connect Wallet (Top Right)";
+        }
+
+        async function connectWallet() {
+            if (!window.ethereum) return alert("Install MetaMask");
             try {
                 provider = new ethers.BrowserProvider(window.ethereum);
                 signer = await provider.getSigner();
                 userAddress = await signer.getAddress();
-
-                const btn = document.getElementById('connectWalletBtn');
-                btn.textContent = userAddress.slice(0, 6) + "..." + userAddress.slice(-4);
+                
+                const btn = document.getElementById('walletBtn');
+                btn.innerText = `${userAddress.slice(0,5)}...${userAddress.slice(-4)}`;
                 btn.classList.add('connected');
-                
-                updateStatusText();
-                await checkAndSwitchNetwork();
-
-            } catch (error) {
-                console.error(error);
-                alert("Failed to connect wallet.");
-            }
+                updateRunButton();
+            } catch (err) { alert("Connection failed"); }
         }
 
-        async function checkAndSwitchNetwork() {
-            const network = await provider.getNetwork();
-            if (network.chainId !== 43113n) { // Fuji Chain ID
-                try {
-                    await window.ethereum.request({
-                        method: 'wallet_switchEthereumChain',
-                        params: [{ chainId: FUJI_CHAIN_ID }],
-                    });
-                } catch (switchError) {
-                    if (switchError.code === 4902) {
-                        await window.ethereum.request({
-                            method: 'wallet_addEthereumChain',
-                            params: [FUJI_CONFIG],
-                        });
-                    }
-                }
-            }
-        }
+        async function handlePayAndRun() {
+            const prompt = document.getElementById('promptInput').value.trim();
+            if(!prompt) return alert("Enter a prompt");
 
-        // --- Core Logic ---
-        async function handlePaymentAndGeneration() {
-            if (!userAddress) {
-                await connectWallet();
-                if(!userAddress) return;
-            }
-
-            const prompt = document.getElementById('prompt').value.trim();
-            const model = document.getElementById('modelSelect').value;
-
-            if (!prompt) { alert("Please enter a prompt."); return; }
-            if (!model) { alert("Please select a model."); return; }
-
-            // UI Loading State
-            const btn = document.getElementById('generateBtn');
-            const btnText = document.getElementById('btnText');
-            const spinner = document.getElementById('btnSpinner');
-            const errorMsg = document.getElementById('errorMsg');
-            
-            errorMsg.style.display = 'none';
+            const btn = document.getElementById('runBtn');
+            const originalText = btn.innerText;
             btn.disabled = true;
-            spinner.style.display = 'block';
-            
+
             try {
-                // 1. PAYMENT PHASE
-                btnText.textContent = "Processing USDC...";
-                await checkAndSwitchNetwork();
+                // 1. Switch Network
+                const network = await provider.getNetwork();
+                if (network.chainId !== 43113n) {
+                    await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0xa869' }] });
+                    provider = new ethers.BrowserProvider(window.ethereum);
+                    signer = await provider.getSigner();
+                }
 
-                if(!systemConfig.contract) throw new Error("Payment config missing.");
+                // 2. Pay
+                const totalCost = Array.from(selectedModels).reduce((sum, k) => sum + availableModels[k].cost_usd, 0);
+                const usdcUnits = Math.round(totalCost * 1000000); 
 
-                const usdcContract = new ethers.Contract(systemConfig.contract, ERC20_ABI, signer);
-
-                // Calculate Amount: USD Cost * 10^6 (USDC Decimals)
-                // e.g. 0.03 * 1000000 = 30000
-                const amountUnits = Math.round(currentModelCostUSD * 1000000);
+                btn.innerText = "Confirming in Wallet...";
                 
-                console.log(`Sending ${amountUnits} USDC units for model ${model} ($${currentModelCostUSD})`);
-
-                const tx = await usdcContract.transfer(systemConfig.receiver, amountUnits);
-
-                btnText.textContent = "Verifying On-Chain...";
+                const ERC20_ABI = ["function transfer(address to, uint256 amount) returns (bool)"];
+                const contract = new ethers.Contract(systemConfig.contract, ERC20_ABI, signer);
                 
-                // Wait for 1 confirmation
+                const tx = await contract.transfer(systemConfig.receiver, usdcUnits);
+                btn.innerText = "Verifying On-Chain...";
                 const receipt = await tx.wait(1);
-                const txHash = receipt.hash;
-                console.log("Transaction confirmed:", txHash);
+                
+                // 3. SHOW LOADERS
+                const placeholders = displayLoadingPlaceholders();
+                
+                // 4. API Call
+                btn.innerText = "Generating Images...";
+                await runGeneration(receipt.hash, prompt, placeholders);
 
-                // 2. GENERATION PHASE
-                btnText.textContent = "Generating...";
-                await generateImageAPI(txHash, model);
+            } catch(e) {
+                console.error(e);
+                alert("Error: " + (e.message || "Transaction failed"));
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+                updateRunButton();
+            }
+        }
+
+        function displayLoadingPlaceholders() {
+            const container = document.getElementById('resultsFlex');
+            const placeholders = {};
+            
+            Array.from(selectedModels).forEach(modelName => {
+                const div = document.createElement('div');
+                div.className = 'result-card loading-placeholder';
+                div.innerHTML = `
+                    <div class="loading-spinner"></div>
+                    <span style="font-size:0.9rem">Generating <b>${modelName}</b>...</span>
+                `;
+                container.prepend(div);
+                placeholders[modelName] = div; 
+            });
+            
+            document.getElementById('resultsContainer').scrollLeft = 0;
+            return placeholders;
+        }
+
+        async function runGeneration(txHash, prompt, placeholders) {
+            try {
+                const response = await fetch(`${API_BASE}/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Payment-Tx': txHash },
+                    body: JSON.stringify({ prompt: prompt, models: Array.from(selectedModels) })
+                });
+
+                if(!response.ok) throw new Error("Server Generation Failed");
+
+                const data = await response.json();
+                updateResults(data.results, placeholders);
 
             } catch (err) {
-                console.error(err);
-                
-                let msg = err.message || "Unknown error";
-                if (msg.includes("rejected")) msg = "Transaction rejected by user.";
-                else if (msg.includes("insufficient funds")) msg = "Insufficient AVAX or USDC.";
-                else if (msg.includes("402")) msg = "Payment verification failed.";
-                
-                showError(msg);
-                btnText.textContent = "Pay & Generate";
-            } finally {
-                btn.disabled = false;
-                spinner.style.display = 'none';
-                if(btnText.textContent === "Generating...") {
-                    btnText.textContent = "Pay & Generate";
-                }
+                Object.values(placeholders).forEach(div => {
+                    div.innerHTML = `<div class="result-error" style="padding:1rem;color:red">API Error</div>`;
+                });
             }
         }
 
-        async function generateImageAPI(txHash, model) {
-            const prompt = document.getElementById('prompt').value.trim();
-            const negativePrompt = document.getElementById('negative_prompt').value.trim();
-            const width = parseInt(document.getElementById('width').value);
-            const height = parseInt(document.getElementById('height').value);
-            
-            const payload = {
-                prompt,
-                model: model, // Send selected model
-                negative_prompt: negativePrompt || null,
-                width,
-                height
-            };
-
-            const response = await fetch(`${API_BASE}/generate`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Payment-Tx': txHash
-                },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.detail || "Generation API failed");
-            }
-
-            const data = await response.json();
-            const gallery = document.getElementById('gallery');
-            const placeholder = document.getElementById('placeholder');
-            
-            placeholder.style.display = 'none';
-            document.getElementById('btnText').textContent = "Pay & Generate";
-
-            data.image_urls.forEach(url => {
-                const imgCard = document.createElement('div');
-                imgCard.className = 'image-card';
-                
-                imgCard.innerHTML = `
-                    <a href="${url}" target="_blank">
-                        <img src="${url}" alt="${prompt}" loading="lazy">
-                    </a>
-                    <div class="meta">
-                        <span>${data.model_used}</span>
-                        <span>$${data.cost_usd}</span>
-                    </div>
-                `;
-                
-                gallery.prepend(imgCard);
+        function updateResults(results, placeholders) {
+            results.forEach(res => {
+                const card = placeholders[res.model_name];
+                if(card) {
+                    card.classList.remove('loading-placeholder');
+                    
+                    if (res.status === 'success' && res.image_urls.length > 0) {
+                        card.innerHTML = `
+                            <img src="${res.image_urls[0]}" loading="lazy">
+                            <div class="result-meta">
+                                <strong>${res.model_name}</strong>
+                                <span style="color:#10B981; font-size:0.8rem">✔ Success</span>
+                            </div>
+                        `;
+                    } else {
+                        card.innerHTML = `
+                            <div style="padding:2rem; text-align:center; color:#EF4444; background:#FEF2F2; height:100%; display:flex; flex-direction:column; justify-content:center;">
+                                <div>⚠ Failed</div>
+                                <div style="font-size:0.8rem; margin-top:5px; opacity:0.8">${res.error_message || "Unknown"}</div>
+                            </div>
+                        `;
+                    }
+                }
             });
         }
     </script>
