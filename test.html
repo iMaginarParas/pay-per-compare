@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDXL Image Generator</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 2rem;
+        }
+
+        /* Controls Section */
+        .controls {
+            background-color: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            height: fit-content;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: var(--primary);
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+
+        textarea, input, select {
+            width: 100%;
+            background-color: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+        }
+
+        textarea:focus, input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .row {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .col {
+            flex: 1;
+        }
+
+        button {
+            width: 100%;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 1rem;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        /* Results Section */
+        .results {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        .image-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            aspect-ratio: 1;
+            position: relative;
+        }
+
+        .image-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .status-msg {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #ffffff3d;
+            border-top: 3px solid #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="controls">
+            <h1>SDXL Generator</h1>
+            
+            <div class="form-group">
+                <label for="prompt">Prompt *</label>
+                <textarea id="prompt" placeholder="A futuristic city with neon lights..." required></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="negative_prompt">Negative Prompt</label>
+                <textarea id="negative_prompt" placeholder="blurry, bad quality, distorted..." style="min-height: 60px;"></textarea>
+            </div>
+
+            <div class="row">
+                <div class="col form-group">
+                    <label>Width</label>
+                    <select id="width">
+                        <option value="1024">1024</option>
+                        <option value="768" selected>768</option>
+                        <option value="512">512</option>
+                    </select>
+                </div>
+                <div class="col form-group">
+                    <label>Height</label>
+                    <select id="height">
+                        <option value="1024">1024</option>
+                        <option value="768" selected>768</option>
+                        <option value="512">512</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col form-group">
+                    <label>Steps (1-50)</label>
+                    <input type="number" id="steps" value="25" min="1" max="50">
+                </div>
+                <div class="col form-group">
+                    <label>Outputs (1-4)</label>
+                    <input type="number" id="num_outputs" value="1" min="1" max="4">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                 <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="watermark" style="width: auto;"> 
+                    Apply Watermark
+                 </label>
+            </div>
+
+            <button id="generateBtn" onclick="generateImages()">
+                <div class="spinner" id="btnSpinner"></div>
+                <span id="btnText">Generate Image</span>
+            </button>
+            
+            <div id="errorMsg" style="color: #ef4444; margin-top: 1rem; font-size: 0.9rem; display: none;"></div>
+        </div>
+
+        <div class="results">
+            <div id="gallery" class="gallery">
+                </div>
+            <div id="placeholder" class="status-msg">
+                Generated images will appear here.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000/generate";
+
+        async function generateImages() {
+            const prompt = document.getElementById('prompt').value.trim();
+            const negativePrompt = document.getElementById('negative_prompt').value.trim();
+            const width = parseInt(document.getElementById('width').value);
+            const height = parseInt(document.getElementById('height').value);
+            const steps = parseInt(document.getElementById('steps').value);
+            const numOutputs = parseInt(document.getElementById('num_outputs').value);
+            const watermark = document.getElementById('watermark').checked;
+
+            const btn = document.getElementById('generateBtn');
+            const btnText = document.getElementById('btnText');
+            const spinner = document.getElementById('btnSpinner');
+            const errorMsg = document.getElementById('errorMsg');
+            const gallery = document.getElementById('gallery');
+            const placeholder = document.getElementById('placeholder');
+
+            // Validation
+            if (!prompt) {
+                errorMsg.textContent = "Please enter a prompt.";
+                errorMsg.style.display = "block";
+                return;
+            }
+
+            // Reset UI State
+            errorMsg.style.display = "none";
+            btn.disabled = true;
+            btnText.textContent = "Generating...";
+            spinner.style.display = "block";
+            gallery.innerHTML = ""; // Clear previous images
+            placeholder.style.display = "block";
+            placeholder.textContent = "Generating your masterpiece... this may take a few seconds.";
+
+            try {
+                const payload = {
+                    prompt: prompt,
+                    negative_prompt: negativePrompt || null,
+                    width: width,
+                    height: height,
+                    num_inference_steps: steps,
+                    refine: "expert_ensemble_refiner",
+                    apply_watermark: watermark,
+                    num_outputs: numOutputs
+                };
+
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to generate image');
+                }
+
+                const data = await response.json();
+
+                // Clear placeholder and render images
+                placeholder.style.display = "none";
+                
+                if (data.image_urls && data.image_urls.length > 0) {
+                    data.image_urls.forEach(url => {
+                        const imgCard = document.createElement('div');
+                        imgCard.className = 'image-card';
+                        
+                        const img = document.createElement('img');
+                        img.src = url;
+                        img.alt = prompt;
+                        
+                        // Add click to open full size
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.target = "_blank";
+                        link.appendChild(img);
+                        
+                        imgCard.appendChild(link);
+                        gallery.appendChild(imgCard);
+                    });
+                } else {
+                    placeholder.style.display = "block";
+                    placeholder.textContent = "No images returned from API.";
+                }
+
+            } catch (err) {
+                console.error(err);
+                errorMsg.textContent = "Error: " + err.message;
+                errorMsg.style.display = "block";
+                placeholder.textContent = "Generation failed.";
+            } finally {
+                // Restore Button State
+                btn.disabled = false;
+                btnText.textContent = "Generate Image";
+                spinner.style.display = "none";
+            }
+        }
+    </script>
+</body>
+</html>
