@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SDXL Generator (Pay with USDC)</title>
+    <title>Multi-Model Gen (USDC)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
     <style>
         :root {
@@ -97,6 +97,16 @@
             font-size: 0.875rem;
             color: var(--text-muted);
             margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .badge {
+            background: var(--primary);
+            color: white;
+            font-size: 0.7rem;
+            padding: 1px 6px;
+            border-radius: 4px;
         }
 
         textarea, input, select {
@@ -181,13 +191,19 @@
             border-radius: 12px;
             overflow: hidden;
             border: 1px solid var(--border);
-            aspect-ratio: 1;
             position: relative;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .image-card img {
             width: 100%;
-            height: 100%;
+            height: auto;
+            aspect-ratio: 1;
             object-fit: cover;
             display: block;
             transition: transform 0.3s ease;
@@ -195,6 +211,16 @@
         
         .image-card:hover img {
             transform: scale(1.05);
+        }
+
+        .image-meta {
+            padding: 10px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            background: var(--bg);
+            display: flex;
+            justify-content: space-between;
         }
 
         .status-msg {
@@ -232,8 +258,15 @@
     <div class="container">
         <div class="controls">
             <div class="header-row">
-                <h1>SDXL Generator</h1>
+                <h1>AI Generator</h1>
                 <button id="connectWalletBtn" class="wallet-btn" onclick="connectWallet()">Connect Wallet</button>
+            </div>
+
+            <div class="form-group">
+                <label for="modelSelect">Model <span id="modelCost" class="badge">Loading...</span></label>
+                <select id="modelSelect" onchange="updateModelInfo()">
+                    <option value="sdxl" selected>Loading models...</option>
+                </select>
             </div>
             
             <div class="form-group">
@@ -276,7 +309,7 @@
                 <div class="spinner" id="btnSpinner"></div>
                 <span id="btnText">Pay & Generate</span>
             </button>
-            <span class="cost-badge" id="costDisplay">Loading Price...</span>
+            <span class="cost-badge" id="costDisplay">Connecting...</span>
             
             <div id="errorMsg" style="color: #ef4444; margin-top: 1rem; font-size: 0.9rem; display: none;"></div>
         </div>
@@ -284,23 +317,25 @@
         <div class="results">
             <div id="gallery" class="gallery"></div>
             <div id="placeholder" class="status-msg">
-                Connect your wallet and pay to generate.
+                Connect your wallet to start.
             </div>
         </div>
     </div>
 
     <script>
-        const API_BASE = "https://pay-per-compare-production.up.railway.app";
+        const API_BASE = "https://pay-per-compare-production.up.railway.app"; // Update if local
         let provider, signer, userAddress;
         
-        // This will be populated from your Backend API
         let paymentConfig = {
             contract: "", 
             receiver: "",
-            amount_units: 30000 // Default 0.03 USDC (30000 units)
+            amount_units: 30000, 
+            readable_amount: "0.03 USDC"
         };
+        
+        let availableModels = {};
 
-        // Standard ERC-20 ABI (Only the transfer function needed)
+        // Standard ERC-20 ABI
         const ERC20_ABI = [
             "function transfer(address to, uint256 amount) returns (bool)",
             "function decimals() view returns (uint8)"
@@ -316,27 +351,81 @@
             blockExplorerUrls: ['https://testnet.snowtrace.io/']
         };
 
-        // Initialize: Fetch Payment Config from Backend
+        // --- Initialization ---
         window.onload = async () => {
+            await Promise.all([fetchPaymentConfig(), fetchModels()]);
+        };
+
+        async function fetchPaymentConfig() {
             try {
                 const res = await fetch(`${API_BASE}/`);
                 const data = await res.json();
                 if(data.payment_info) {
                     paymentConfig = data.payment_info;
-                    console.log("Payment Config Loaded:", paymentConfig);
-                    // Use readable amount from backend or calculate locally
-                    const displayAmount = data.payment_info.readable_amount || "0.03 USDC";
-                    document.getElementById('costDisplay').textContent = `Cost: ${displayAmount}`;
-                    document.getElementById('placeholder').textContent = `Connect your wallet and pay ${displayAmount} to generate.`;
+                    console.log("Payment Config:", paymentConfig);
+                    updateCostDisplay();
                 }
             } catch (err) {
-                console.error("Failed to connect to backend", err);
-                document.getElementById('errorMsg').innerText = "Backend is offline or unreachable.";
-                document.getElementById('errorMsg').style.display = 'block';
-                document.getElementById('costDisplay').innerText = "Cost: 0.03 USDC (Offline Mode)";
+                console.error("Config Error:", err);
+                showError("Backend unavailable.");
             }
-        };
+        }
 
+        async function fetchModels() {
+            try {
+                const res = await fetch(`${API_BASE}/models`);
+                const data = await res.json();
+                
+                const select = document.getElementById('modelSelect');
+                select.innerHTML = ""; // Clear loading
+                
+                availableModels = data.available_models;
+                
+                // Populate Dropdown
+                for (const [key, val] of Object.entries(availableModels)) {
+                    const opt = document.createElement('option');
+                    opt.value = key;
+                    opt.text = `${key} ($${val.cost_usd})`;
+                    select.appendChild(opt);
+                }
+                
+                // Set default if exists
+                if (availableModels["sdxl"]) select.value = "sdxl";
+                
+                updateModelInfo();
+                
+            } catch (err) {
+                console.error("Model Error:", err);
+                document.getElementById('modelSelect').innerHTML = "<option>Failed to load models</option>";
+            }
+        }
+
+        function updateModelInfo() {
+            const select = document.getElementById('modelSelect');
+            const modelKey = select.value;
+            const info = availableModels[modelKey];
+            
+            if(info) {
+                document.getElementById('modelCost').textContent = `$${info.cost_usd}`;
+            }
+        }
+        
+        function updateCostDisplay() {
+            const display = document.getElementById('costDisplay');
+            const placeholder = document.getElementById('placeholder');
+            const amount = paymentConfig.readable_amount || "0.03 USDC";
+            
+            display.textContent = `Gateway Fee: ${amount}`;
+            placeholder.textContent = `Connect wallet and pay ${amount} to generate.`;
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('errorMsg');
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        // --- Wallet Logic ---
         async function connectWallet() {
             if (!window.ethereum) {
                 alert("MetaMask is not installed!");
@@ -344,29 +433,26 @@
             }
 
             try {
-                // Request Access
                 provider = new ethers.BrowserProvider(window.ethereum);
                 signer = await provider.getSigner();
                 userAddress = await signer.getAddress();
 
-                // Update UI
                 const btn = document.getElementById('connectWalletBtn');
                 btn.textContent = userAddress.slice(0, 6) + "..." + userAddress.slice(-4);
                 btn.classList.add('connected');
+                
                 document.getElementById('placeholder').textContent = "Ready to generate.";
-
-                // Check Network
                 await checkAndSwitchNetwork();
 
             } catch (error) {
                 console.error(error);
-                alert("Failed to connect wallet.");
+                showError("Wallet connection failed.");
             }
         }
 
         async function checkAndSwitchNetwork() {
             const network = await provider.getNetwork();
-            if (network.chainId !== 43113n) { // Fuji Chain ID
+            if (network.chainId !== 43113n) { 
                 try {
                     await window.ethereum.request({
                         method: 'wallet_switchEthereumChain',
@@ -383,6 +469,7 @@
             }
         }
 
+        // --- Payment & Generation ---
         async function handlePaymentAndGeneration() {
             if (!userAddress) {
                 await connectWallet();
@@ -395,63 +482,49 @@
                 return;
             }
 
-            // UI Loading State
+            // Reset UI
             const btn = document.getElementById('generateBtn');
             const btnText = document.getElementById('btnText');
             const spinner = document.getElementById('btnSpinner');
             const errorMsg = document.getElementById('errorMsg');
-            const placeholder = document.getElementById('placeholder');
             
             errorMsg.style.display = 'none';
             btn.disabled = true;
             spinner.style.display = 'block';
             
             try {
-                // 1. PAYMENT PHASE
+                // 1. PAYMENT
                 btnText.textContent = "Processing USDC...";
-                
                 await checkAndSwitchNetwork();
 
-                // Create Contract Instance
-                // Ensure contract address is present
-                if(!paymentConfig.contract) throw new Error("Contract address not loaded.");
                 const usdcContract = new ethers.Contract(paymentConfig.contract, ERC20_ABI, signer);
-
-                // Send Transfer Transaction
-                // Note: We use the raw amount units provided by backend (30000 for 0.03 USDC)
+                
+                // IMPORTANT: We pay the Gateway Fee defined in backend (payment.py)
+                // Even if the model is cheaper, the gateway demands the configured amount.
                 const tx = await usdcContract.transfer(paymentConfig.receiver, paymentConfig.amount_units);
 
                 btnText.textContent = "Verifying On-Chain...";
-                placeholder.textContent = "Payment sent! Waiting for block confirmation...";
+                document.getElementById('placeholder').textContent = "Payment sent! Waiting for confirmation...";
                 
-                // Wait for confirmation
                 const receipt = await tx.wait(1);
                 const txHash = receipt.hash;
-                console.log("Transaction confirmed:", txHash);
+                console.log("Tx Confirmed:", txHash);
 
-                // 2. GENERATION PHASE
+                // 2. API CALL
                 btnText.textContent = "Generating...";
-                placeholder.textContent = "Payment Verified. Creating Image...";
+                document.getElementById('placeholder').textContent = "Payment Verified. Running Model...";
 
                 await generateImageAPI(txHash);
 
             } catch (err) {
                 console.error(err);
+                let msg = err.message || "Unknown error";
+                if (msg.includes("rejected")) msg = "Transaction rejected.";
+                if (msg.includes("insufficient funds")) msg = "Insufficient AVAX or USDC.";
                 
-                // Handle common user rejections or insufficient funds
-                let msg = err.message;
-                if (msg.includes("user rejected") || (err.info && err.info.error && err.info.error.code === 4001)) {
-                    msg = "Transaction rejected by user.";
-                } else if (msg.includes("insufficient funds")) {
-                    msg = "Insufficient AVAX for gas.";
-                } else if (msg.includes("transfer amount exceeds balance")) {
-                    msg = "Insufficient USDC balance.";
-                }
-                
-                errorMsg.textContent = "Error: " + msg;
-                errorMsg.style.display = 'block';
+                showError(msg);
                 btnText.textContent = "Pay & Generate";
-                placeholder.textContent = "Process failed.";
+                document.getElementById('placeholder').textContent = "Process failed.";
             } finally {
                 btn.disabled = false;
                 spinner.style.display = 'none';
@@ -467,9 +540,11 @@
             const width = parseInt(document.getElementById('width').value);
             const height = parseInt(document.getElementById('height').value);
             const steps = parseInt(document.getElementById('steps').value);
+            const model = document.getElementById('modelSelect').value; // Get selected model
             
             const payload = {
                 prompt,
+                model: model, // Send model to backend
                 negative_prompt: negativePrompt || null,
                 width,
                 height,
@@ -480,7 +555,7 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Payment-Tx': txHash // <-- Authorization Header
+                    'X-Payment-Tx': txHash
                 },
                 body: JSON.stringify(payload)
             });
@@ -497,17 +572,22 @@
             placeholder.style.display = 'none';
             document.getElementById('btnText').textContent = "Pay & Generate";
 
+            // Render Images
             data.image_urls.forEach(url => {
                 const imgCard = document.createElement('div');
                 imgCard.className = 'image-card';
-                const img = document.createElement('img');
-                img.src = url;
-                const link = document.createElement('a');
-                link.href = url;
-                link.target = "_blank";
-                link.appendChild(img);
-                imgCard.appendChild(link);
-                gallery.prepend(imgCard); // Add new images to top
+                
+                imgCard.innerHTML = `
+                    <a href="${url}" target="_blank">
+                        <img src="${url}" alt="Generated Image" loading="lazy">
+                    </a>
+                    <div class="image-meta">
+                        <span>${data.model_used}</span>
+                        <span>$${data.cost_usd}</span>
+                    </div>
+                `;
+                
+                gallery.prepend(imgCard);
             });
         }
     </script>

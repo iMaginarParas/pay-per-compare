@@ -12,12 +12,8 @@ AVAX_RPC_URL = "https://api.avax-test.network/ext/bc/C/rpc"
 w3 = Web3(Web3.HTTPProvider(AVAX_RPC_URL))
 
 # Accessing env vars safely with fallbacks or direct access
-# Note: Ensure your .env file is accessible to this path
 RECEIVING_WALLET_ADDRESS = to_checksum_address(os.getenv("RECEIVING_WALLET_ADDRESS"))
 USDC_CONTRACT_ADDRESS = to_checksum_address(os.getenv("USDC_CONTRACT_ADDRESS"))
-
-# Cost: 1.0 USDC (USDC has 6 decimals, so 0.03 = 30,000 units)
-REQUIRED_USDC_AMOUNT = int(0.03 * 10**6)
 
 # Store used hashes to prevent replay attacks
 USED_TRANSACTION_HASHES = set()
@@ -34,10 +30,21 @@ ERC20_TRANSFER_EVENT_ABI = {
     "type": "event",
 }
 
-async def verify_usdc_payment(x_payment_tx: str = Header(..., alias="X-Payment-Tx")):
+async def verify_usdc_payment(
+    required_amount_usd: float,
+    x_payment_tx: str = Header(..., alias="X-Payment-Tx")
+):
     """
     Dependency function to verify USDC payment on Avalanche Fuji.
+    Now accepts dynamic amount based on model cost.
+    
+    Args:
+        required_amount_usd: Required payment in USD (e.g., 0.03 for SDXL)
+        x_payment_tx: Transaction hash from header
     """
+    # Convert USD to USDC units (6 decimals)
+    required_usdc_units = int(required_amount_usd * 10**6)
+    
     if x_payment_tx in USED_TRANSACTION_HASHES:
         raise HTTPException(status_code=402, detail="Payment hash already used.")
 
@@ -59,12 +66,15 @@ async def verify_usdc_payment(x_payment_tx: str = Header(..., alias="X-Payment-T
         # Check if money was sent TO us
         if transfer['args']['to'] == RECEIVING_WALLET_ADDRESS:
             # Check amount
-            if transfer['args']['value'] >= REQUIRED_USDC_AMOUNT:
+            if transfer['args']['value'] >= required_usdc_units:
                 payment_found = True
                 break
     
     if not payment_found:
-        raise HTTPException(status_code=402, detail="No valid USDC transfer found in this transaction.")
+        raise HTTPException(
+            status_code=402, 
+            detail=f"No valid USDC transfer found. Required: ${required_amount_usd} USD ({required_usdc_units} units)"
+        )
 
     USED_TRANSACTION_HASHES.add(x_payment_tx)
     return x_payment_tx

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Response, Depends
+from fastapi import FastAPI, Response, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -6,13 +6,13 @@ from dotenv import load_dotenv
 from x402.payment import (
     verify_usdc_payment, 
     USDC_CONTRACT_ADDRESS, 
-    RECEIVING_WALLET_ADDRESS, 
-    REQUIRED_USDC_AMOUNT
+    RECEIVING_WALLET_ADDRESS
 )
 from model.txt2img import (
     ImageGenerationRequest, 
     ImageGenerationResponse, 
-    run_replicate_inference
+    run_replicate_inference,
+    MODEL_REGISTRY
 )
 
 load_dotenv()
@@ -31,13 +31,17 @@ app.add_middleware(
 @app.get("/")
 async def root():
     return {
-        "message": "x402 Payment Gateway Running",
+        "message": "x402 Payment Gateway Running - Pay Per Use",
         "payment_info": {
             "currency": "USDC (Fuji)",
             "contract": USDC_CONTRACT_ADDRESS,
             "receiver": RECEIVING_WALLET_ADDRESS,
-            "amount_units": REQUIRED_USDC_AMOUNT,
-            "readable_amount": "0.03 USDC"
+            "pricing": "Variable - depends on model selected",
+            "range": "$0.0016 - $0.04 USD per generation"
+        },
+        "endpoints": {
+            "list_models": "GET /models",
+            "generate": "POST /generate"
         }
     }
 
@@ -62,16 +66,23 @@ async def list_models():
 async def generate_image(
     request: ImageGenerationRequest, 
     response: Response,
-    payment_hash: str = Depends(verify_usdc_payment)
+    x_payment_tx: str = Header(..., alias="X-Payment-Tx")
 ):
-    # The payment_hash dependency ensures payment is verified before this code runs.
+    # Validate model exists
+    if request.model not in MODEL_REGISTRY:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Model '{request.model}' not found. Use GET /models to see available models."
+        )
+    
+    # Get model cost
+    model_cost = MODEL_REGISTRY[request.model]["cost_usd"]
+    
+    # Verify payment with the model's actual cost
+    await verify_usdc_payment(model_cost, x_payment_tx)
     
     # Call the logic from model/txt2img.py
     image_urls = run_replicate_inference(request)
-    
-    # Get model cost from registry
-    from model.txt2img import MODEL_REGISTRY
-    model_cost = MODEL_REGISTRY[request.model]["cost_usd"]
     
     return ImageGenerationResponse(
         image_urls=image_urls,

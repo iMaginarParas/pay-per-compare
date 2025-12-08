@@ -172,8 +172,17 @@ def run_replicate_inference(request: ImageGenerationRequest) -> List[str]:
     
     # Handle different output types
     if model_config["output_type"] == "single":
-        # Single File object - convert to URL string
-        return [str(output.url())]
+        # Single output - could be File object or URL string
+        if hasattr(output, 'url'):
+            return [str(output.url())]
+        else:
+            return [str(output)]
     else:
-        # Array of File objects - convert each to URL string
-        return [str(item.url()) for item in output]
+        # Array output - could be File objects or URL strings
+        result = []
+        for item in output:
+            if hasattr(item, 'url'):
+                result.append(str(item.url()))
+            else:
+                result.append(str(item))
+        return result
