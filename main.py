@@ -68,27 +68,24 @@ async def generate_image(
     response: Response,
     x_payment_tx: str = Header(..., alias="X-Payment-Tx")
 ):
-    # Validate model exists
-    if request.model not in MODEL_REGISTRY:
+    # Validate all selected models exist
+    invalid_models = [m for m in request.models if m not in MODEL_REGISTRY]
+    if invalid_models:
         raise HTTPException(
             status_code=400, 
-            detail=f"Model '{request.model}' not found. Use GET /models to see available models."
+            detail=f"Invalid models: {invalid_models}. Use GET /models to see available models."
         )
     
-    # Get model cost
-    model_cost = MODEL_REGISTRY[request.model]["cost_usd"]
+    # Calculate total cost for all selected models
+    total_cost = sum(MODEL_REGISTRY[model]["cost_usd"] for model in request.models)
     
-    # Verify payment with the model's actual cost
-    await verify_usdc_payment(model_cost, x_payment_tx)
+    # Verify payment with total cost
+    await verify_usdc_payment(total_cost, x_payment_tx)
     
-    # Call the logic from model/txt2img.py
-    image_urls = run_replicate_inference(request)
+    # Run all models and get results
+    generation_response = run_replicate_inference(request)
     
-    return ImageGenerationResponse(
-        image_urls=image_urls,
-        model_used=request.model,
-        cost_usd=model_cost
-    )
+    return generation_response
 
 if __name__ == "__main__":
     import uvicorn
