@@ -1,0 +1,19 @@
+Credentials and Environment Variables
+
+.env
+
+Virtual Environment
+
+venv/
+env/
+.venv/
+
+Python compiled files
+
+pycache/
+*.py[cod]
+*$py.class
+
+Mac system files
+
+.DS_Store
