@@ -41,6 +41,23 @@ async def root():
         }
     }
 
+@app.get("/models")
+async def list_models():
+    """List all available models with their costs"""
+    from model.txt2img import MODEL_REGISTRY
+    
+    models_info = {}
+    for model_name, config in MODEL_REGISTRY.items():
+        models_info[model_name] = {
+            "cost_usd": config["cost_usd"],
+            "identifier": config.get("version") or config.get("identifier")
+        }
+    
+    return {
+        "available_models": models_info,
+        "total_models": len(models_info)
+    }
+
 @app.post("/generate", response_model=ImageGenerationResponse)
 async def generate_image(
     request: ImageGenerationRequest, 
@@ -52,7 +69,15 @@ async def generate_image(
     # Call the logic from model/txt2img.py
     image_urls = run_replicate_inference(request)
     
-    return ImageGenerationResponse(image_urls=image_urls)
+    # Get model cost from registry
+    from model.txt2img import MODEL_REGISTRY
+    model_cost = MODEL_REGISTRY[request.model]["cost_usd"]
+    
+    return ImageGenerationResponse(
+        image_urls=image_urls,
+        model_used=request.model,
+        cost_usd=model_cost
+    )
 
 if __name__ == "__main__":
     import uvicorn
