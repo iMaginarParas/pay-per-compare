@@ -601,32 +601,7 @@ MIT License - Free to use, modify, and distribute
 
 ---
 
-## 🙏 Acknowledgments
 
-- **Avalanche** for providing fast, low-cost blockchain infrastructure
-- **Circle** for USDC stablecoin enabling micropayments
-- **Replicate** for hosting 22 incredible AI models
-- **FastAPI** for the excellent Python framework
-- **The open-source community** for all the tools that made this possible
 
----
 
-## 🔗 Links
 
-- **Live Demo**: [Coming Soon]
-- **Swagger Docs**: http://localhost:8000/docs
-- **GitHub**: [Repository URL]
-- **Discord**: [Community Server]
-- **Twitter**: [@YourHandle]
-
----
-
-<div align="center">
-
-### **Star ⭐ this repo if you find it interesting!**
-
-**Built for [Hackathon Name] | December 2024**
-
-*Making AI generation accessible, transparent, and decentralized*
-
-</div>
