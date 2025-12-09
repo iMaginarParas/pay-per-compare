@@ -1,0 +1,6 @@
+{
+  "/page": "app/page.js",
+  "/model/image/page": "app/model/image/page.js",
+  "/model/video/page": "app/model/video/page.js",
+  "/model/tts/page": "app/model/tts/page.js"
+}
