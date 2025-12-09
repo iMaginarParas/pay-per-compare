@@ -4,7 +4,6 @@
 
 [![Avalanche](https://img.shields.io/badge/Avalanche-Fuji-E84142?logo=avalanche)](https://www.avax.network/)
 [![USDC](https://img.shields.io/badge/Payment-USDC-2775CA?logo=circle)](https://www.circle.com/usdc)
-[![Replicate](https://img.shields.io/badge/AI-Replicate-black)](https://replicate.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 
 ---
